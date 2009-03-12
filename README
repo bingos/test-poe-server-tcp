@@ -1,0 +1,244 @@
+NAME
+    Test::POE::Server::TCP - A POE Component providing TCP server services
+    for test cases
+
+SYNOPSIS
+       # An echo server test
+
+       use strict;
+       use Test::More;
+       use POE qw(Wheel::SocketFactory Wheel::ReadWrite Filter::Line);
+       use Test::POE::Server::TCP;
+       
+   plan tests => 5;
+       
+   my @data = (
+         'This is a test',
+         'This is another test',
+         'This is the last test',
+       );
+       
+   POE::Session->create(
+         package_states => [
+            'main' => [qw(
+                            _start
+                            _sock_up
+                            _sock_fail
+                            _sock_in
+                            _sock_err
+                            testd_registered
+                            testd_connected
+                            testd_disconnected
+                            testd_client_input
+            )],
+         ],
+         heap => { data => \@data, },
+       );
+       
+   $poe_kernel->run();
+       exit 0;
+       
+   sub _start {
+         $_[HEAP]->{testd} = Test::POE::Server::TCP->spawn(
+            address => '127.0.0.1',
+            port => 0,
+         );
+         return;
+       }
+       
+   sub testd_registered {
+         my ($heap,$object) = @_[HEAP,ARG0];
+         $heap->{port} = $object->port();
+         $heap->{factory} = POE::Wheel::SocketFactory->new(
+            RemoteAddress  => '127.0.0.1',
+            RemotePort     => $heap->{port},
+            SuccessEvent   => '_sock_up',
+            FailureEvent   => '_sock_fail',
+         );
+         return;
+       }
+       
+   sub _sock_up {
+         my ($heap,$socket) = @_[HEAP,ARG0];
+         delete $heap->{factory};
+         $heap->{socket} = POE::Wheel::ReadWrite->new(
+            Handle => $socket,
+            InputEvent => '_sock_in',
+            ErrorEvent => '_sock_err',
+         );
+         $heap->{socket}->put( $heap->{data}->[0] );
+         return;
+       }
+       
+   sub _sock_fail {
+         my $heap = $_[HEAP];
+         delete $heap->{factory};
+         $heap->{testd}->shutdown();
+         return;
+       }
+       
+   sub _sock_in {
+         my ($heap,$input) = @_[HEAP,ARG0];
+         my $data = shift @{ $heap->{data} };
+         ok( $input eq $data, 'Data matched' );
+         unless ( scalar @{ $heap->{data} } ) {
+           delete $heap->{socket};
+           return;
+         }
+         $heap->{socket}->put( $heap->{data}->[0] );
+         return;
+       }
+       
+   sub _sock_err {
+         delete $_[HEAP]->{socket};
+         return;
+       }
+       
+   sub testd_connected {
+         my ($heap,$state,$id) = @_[HEAP,STATE,ARG0];
+         pass($state);
+         return;
+       }
+       
+   sub testd_disconnected {
+         pass($_[STATE]);
+         $poe_kernel->post( $_[SENDER], 'shutdown' );
+         return;
+       }
+       
+   sub testd_client_input {
+         my ($sender,$id,$input) = @_[SENDER,ARG0,ARG1];
+         my $testd = $_[SENDER]->get_heap();
+         $testd->send_to_client( $id, $input );
+         return;
+       }
+
+DESCRIPTION
+    Test::POE::Server::TCP is a POE component that provides a TCP server
+    framework for inclusion in client component test cases, instead of
+    having to roll your own.
+
+    Once registered with the component, a session will receive events
+    related to client connects, disconnects, input and flushed output. Each
+    of these events will refer to a unique client ID which may be used in
+    communication with the component when sending data to the client or
+    disconnecting a client connection.
+
+CONSTRUCTOR
+    spawn
+        Takes a number of optional arguments:
+
+          'alias', set an alias on the component;
+          'address', bind the listening socket to a particular address;
+          'port', listen on a particular port, default is 0, assign a random port;
+          'options', a hashref of POE::Session options;
+          'filter', specify a POE::Filter to use for client connections, default is POE::Filter::Line;
+          'inputfilter', specify a POE::Filter for client input;
+          'outputfilter', specify a POE::Filter for output to clients;
+
+        The semantics for "filter", "inputfilter" and "outputfilter" are the
+        same as for POE::Component::Server::TCP in that one may provide
+        either a "SCALAR", "ARRAYREF" or an "OBJECT".
+
+        If the component is "spawn"ed within another session it will
+        automatically "register" the parent session to receive "all" events.
+
+METHODS
+    session_id
+        Returns the POE::Session ID of the component.
+
+    shutdown
+        Terminates the component. Shuts down the listener and disconnects
+        connected clients.
+
+    send_to_client
+        Send some output to a connected client. First parameter must be a
+        valid client id. Second parameter is a string of text to send.
+
+    disconnect
+        Places a client connection in pending disconnect state. Requires a
+        valid client ID as a parameter. Set this, then send an applicable
+        message to the client using send_to_client() and the client
+        connection will be terminated.
+
+    getsockname
+        Access to the POE::Wheel::SocketFactory method of the underlying
+        listening socket.
+
+    port
+        Returns the port that the component is listening on.
+
+INPUT EVENTS
+    These are events that the component will accept:
+
+    register
+        Takes N arguments: a list of event names that your session wants to
+        listen for, minus the 'testd_' prefix.
+
+        Registering for 'all' will cause it to send all TESTD-related events
+        to you; this is the easiest way to handle it.
+
+    unregister
+        Takes N arguments: a list of event names which you don't want to
+        receive. If you've previously done a 'register' for a particular
+        event which you no longer care about, this event will tell the POP3D
+        to stop sending them to you. (If you haven't, it just ignores you.
+        No big deal).
+
+    shutdown
+        Terminates the component. Shuts down the listener and disconnects
+        connected clients.
+
+    send_to_client
+        Send some output to a connected client. First parameter must be a
+        valid client ID. Second parameter is a string of text to send.
+
+    disconnect
+        Places a client connection in pending disconnect state. Requires a
+        valid client ID as a parameter. Set this, then send an applicable
+        message to the client using send_to_client() and the client
+        connection will be terminated.
+
+OUTPUT EVENTS
+    The component sends the following events to registered sessions:
+
+    testd_registered
+        This event is sent to a registering session. ARG0 is the
+        Test::POE::Server::TCP object.
+
+    testd_listener_failed
+        Generated if the component cannot either start a listener or there
+        is a problem accepting client connections. ARG0 contains the name of
+        the operation that failed. ARG1 and ARG2 hold numeric and string
+        values for $!, respectively.
+
+    testd_connected
+        Generated whenever a client connects to the component. ARG0 is the
+        client ID, ARG1 is the client's IP address, ARG2 is the client's TCP
+        port. ARG3 is our IP address and ARG4 is our socket port.
+
+    testd_disconnected
+        Generated whenever a client disconnects. ARG0 is the client ID.
+
+    testd_client_input
+        Generated whenever a client sends us some traffic. ARG0 is the
+        client ID, ARG1 is the data sent ( tokenised by whatever POE::Filter
+        you specified.
+
+    testd_client_flushed
+        Generated whenever anything we send to the client is actually
+        flushed down the 'line'. ARG0 is the client ID.
+
+AUTHOR
+LICENSE
+    Copyright "(c)" Chris Williams
+
+    This module may be used, modified, and distributed under the same terms
+    as Perl itself. Please see the license that came with your Perl
+    distribution for details.
+
+SEE ALSO
+    POE
+
+    POE::Component::Server::TCP
+

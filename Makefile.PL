@@ -1,0 +1,17 @@
+use 5.006;
+use strict;
+use inc::Module::Install;
+name 'Test-POE-Server-TCP';
+author 'Chris Williams <chris@bingosnet.co.uk>';
+version_from 'lib/Test/POE/Server/TCP.pm';
+abstract_from 'lib/Test/POE/Server/TCP.pm';
+license 'perl';
+perl_version '5.006';
+build_requires 'Test::More' => 0.47;
+build_requires 'Text::ParseWords' => 0;
+requires 'POE' => 0;
+requires 'POE::Wheel::SocketFactory' => 0;
+requires 'POE::Filter::Line' => 0;
+requires 'POE::Wheel::ReadWrite' => 0;
+requires 'POE::Filter' => 0;
+WriteAll();

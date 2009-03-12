@@ -1,0 +1,31 @@
+Test::POE::Server::TCP
+======================
+
+0.18	Mon Feb  2 12:36:52 GMT 2009
+	- Fixed 10_prefix.t test on Cygwin
+
+0.16	Sat Jan 17 12:29:04 GMT 2009
+	- Fixed 07_synopsis.t test on Cygwin
+
+0.14	Thu Jan 15 09:43:58 GMT 2009
+	- Enabled 'prefix' to be specified.
+
+0.12	Tue Jul 29 11:18:53 BST 2008
+	- Provided a really simple synopsis.
+
+0.10	Tue May 20 17:33:15 BST 2008
+	- Added client_info() method.
+
+0.08	Fri May 16 10:24:37 BST 2008
+	- Documented passing an ARRAYREF to send_to_client.
+	- Added test for the above.
+
+0.06	Thu May 15 16:54:07 BST 2008
+	- updated authorship and licensing information
+
+0.04	Thu May 15 09:43:37 BST 2008
+	- Updated LICENSE file
+	- added 'terminate' method and input event.
+
+0.02	Wed May 14 21:42:39 BST 2008
+	- Initial CPAN release.
