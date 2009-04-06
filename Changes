@@ -1,6 +1,10 @@
 Test::POE::Server::TCP
 ======================
 
+1.00	Mon Apr  6 22:56:27 BST 2009
+	- Bump version for 'stable' release
+	- add auto set repository to Makefile.PL
+
 0.18	Mon Feb  2 12:36:52 GMT 2009
 	- Fixed 10_prefix.t test on Cygwin
 
