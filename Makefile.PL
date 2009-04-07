@@ -14,5 +14,5 @@ requires 'POE::Wheel::SocketFactory' => 0;
 requires 'POE::Filter::Line' => 0;
 requires 'POE::Wheel::ReadWrite' => 0;
 requires 'POE::Filter' => 0;
-auto_set_repository;
+eval "auto_set_repository";
 WriteAll();
