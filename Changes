@@ -1,6 +1,10 @@
 Test::POE::Server::TCP
 ======================
 
+1.04	Thu Apr 30 15:09:08 BST 2009
+	- Applied patch from Martijn van Beers that adds pause/resume 
+	  listening methods.
+
 1.02	Tue Apr  7 21:10:28 BST 2009
 	- Make auto_set_repository() only run at author-time
 

@@ -7,7 +7,7 @@ use Socket;
 use Carp qw(carp croak);
 use vars qw($VERSION);
 
-$VERSION = '1.04';
+$VERSION = '1.02';
 
 sub spawn {
   my $package = shift;
@@ -36,16 +36,6 @@ sub spawn {
 
 sub session_id {
   return $_[0]->{session_id};
-}
-
-sub pause_listening {
-  return unless $_[0]->{listener};
-  $_[0]->{listener}->pause_accept();
-}
-
-sub resume_listening {
-  return unless $_[0]->{listener};
-  $_[0]->{listener}->resume_accept();
 }
 
 sub getsockname {
@@ -683,14 +673,6 @@ Places a client connection in pending disconnect state. Requires a valid client 
 
 Immediately disconnects a client conenction. Requires a valid client ID as a parameter.
 
-=item C<pause_listening>
-
-Stops the underlying listening socket from accepting new connections. This lets you test whether you handle the connection timing out gracefully.
-
-=item C<resume_listening>
-
-The companion of C<pause_listening>
-
 =item C<getsockname>
 
 Access to the L<POE::Wheel::SocketFactory> method of the underlying listening socket.
@@ -782,7 +764,7 @@ with code borrowed from L<POE::Component::Server::TCP> by Rocco Caputo, Ann Barc
 
 =head1 LICENSE
 
-Copyright E<copy> Chris Williams, Rocco Caputo, Ann Barcomb and Jos Boumans.
+Copyright C<(c)> Chris Williams, Rocco Caputo, Ann Barcomb and Jos Boumans.
 
 This module may be used, modified, and distributed under the same terms as Perl itself. Please see the license that came with your Perl distribution for details.
 
