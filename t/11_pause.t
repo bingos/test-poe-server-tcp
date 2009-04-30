@@ -4,7 +4,7 @@ use Test::More;
 use POE qw(Wheel::SocketFactory Wheel::ReadWrite);
 use Test::POE::Server::TCP;
 
-#plan tests => 4;
+plan tests => 4;
 
 POE::Session->create(
   package_states => [
@@ -19,7 +19,7 @@ POE::Session->create(
                         timeout
 	)],
   ],
-  heap => \%data,
+#  heap => \%data,
 );
 
 $poe_kernel->run();

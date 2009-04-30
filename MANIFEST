@@ -25,5 +25,6 @@ t/07_synopsis.t
 t/08_buffer.t
 t/09_client_info.t
 t/10_prefix.t
+t/11_pause.t
 t/99_pod.t
 t/99_pod_coverage.t
