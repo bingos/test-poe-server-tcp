@@ -3,7 +3,7 @@ use Test::More;
 use POE qw(Wheel::SocketFactory Wheel::ReadWrite Filter::Line);
 use Test::POE::Server::TCP;
 
-plan tests => 15;
+plan tests => 16;
 
 my @data = (
   'This is a test',
@@ -91,6 +91,7 @@ sub testd_connected {
   my @orig = @_[ARG1..$#_];
   my @test = $heap->{testd}->client_info( $id );
   my $test = $heap->{testd}->client_info( $id );
+  isa_ok( $heap->{testd}->client_wheel( $id ), 'POE::Wheel::ReadWrite' );
   ok( $test[$_] eq $orig[$_], "Client Address: " . $orig[$_] ) for 0 .. 3;
   my @test2 = map { $test->{$_} } qw(peeraddr peerport sockaddr sockport);
   ok( $test2[$_] eq $orig[$_], "Client Address: " . $orig[$_] ) for 0 .. 3;

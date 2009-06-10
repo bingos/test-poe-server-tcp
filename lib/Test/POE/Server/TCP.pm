@@ -7,7 +7,7 @@ use Socket;
 use Carp qw(carp croak);
 use vars qw($VERSION);
 
-$VERSION = '1.04';
+$VERSION = '1.06';
 
 sub spawn {
   my $package = shift;
@@ -145,6 +145,13 @@ sub client_info {
   delete $hash{wheel};
   return map { $hash{$_} } qw(peeraddr peerport sockaddr sockport) if wantarray;
   return \%hash;
+}
+
+sub client_wheel {
+  my $self = shift;
+  my $id = shift || return;
+  return unless $self->_conn_exists( $id );
+  return $self->{clients}->{ $id }->{wheel};
 }
 
 sub _get_filters {
@@ -674,6 +681,11 @@ with the following keys:
   'peerport', the client TCP port;
   'sockaddr', our address;
   'sockport', our TCP port;
+
+=item C<client_wheel>
+
+Retrieve the L<POE::Wheel::ReadWrite> object of a given client. Requires a valid client ID as a parameter. This enables one to 
+manipulate the given L<POE::Wheel::ReadWrite> object, say to switch L<POE::Filter>.
 
 =item C<disconnect>
 

@@ -1,6 +1,9 @@
 Test::POE::Server::TCP
 ======================
 
+1.06	Wed Jun 10 21:47:29 BST 2009
+	- Added client_wheel method to get at the erm client wheel
+
 1.04	Thu Apr 30 15:09:08 BST 2009
 	- Applied patch from Martijn van Beers that adds pause/resume 
 	  listening methods.
