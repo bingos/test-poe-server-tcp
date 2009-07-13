@@ -7,7 +7,7 @@ use Socket;
 use Carp qw(carp croak);
 use vars qw($VERSION);
 
-$VERSION = '1.06';
+$VERSION = '1.08';
 
 sub spawn {
   my $package = shift;
@@ -20,13 +20,14 @@ sub spawn {
   $self->{_prefix} .= '_' unless $self->{_prefix} =~ /\_$/;
   $self->{session_id} = POE::Session->create(
 	object_states => [
-	   $self => { shutdown       => '_shutdown',
-		      send_event     => '__send_event',
-		      send_to_client => '_send_to_client',
-		      disconnect     => '_disconnect',
-		      terminate      => '_terminate',
+	   $self => { shutdown      => '_shutdown',
+		      send_event          => '__send_event',
+		      send_to_client      => '_send_to_client',
+		      send_to_all_clients => '_send_to_all_clients',
+		      disconnect          => '_disconnect',
+		      terminate           => '_terminate',
 	            },
-	   $self => [ qw(_start register unregister _accept_client _accept_failed _conn_input _conn_error _conn_flushed _conn_alarm _send_to_client __send_event _disconnect) ],
+	   $self => [ qw(_start register unregister _accept_client _accept_failed _conn_input _conn_error _conn_flushed _conn_alarm _send_to_client __send_event _disconnect _send_to_all_clients) ],
 	],
 	heap => $self,
 	( ref($options) eq 'HASH' ? ( options => $options ) : () ),
@@ -414,13 +415,27 @@ sub _send_to_client {
   return unless $output;
 
   if ( ref $output eq 'ARRAY' ) {
-    my $first = shift @{ $output };
-    $self->{clients}->{ $id }->{BUFFER} = $output if scalar @{ $output };
+    my $temp = [ @{ $output } ];
+    my $first = shift @{ $temp };
+    $self->{clients}->{ $id }->{BUFFER} = $temp if scalar @{ $temp };
     $self->{clients}->{ $id }->{wheel}->put($first) if defined $first;
     return 1;
   }
 
   $self->{clients}->{ $id }->{wheel}->put($output);
+  return 1;
+}
+
+sub send_to_all_clients {
+  my $self = shift;
+  $poe_kernel->call( $self->{session_id}, '_send_to_all_clients', @_ );
+}
+
+sub _send_to_all_clients {
+  my ($kernel,$self,$output) = @_[KERNEL,OBJECT,ARG0];
+  return unless $output;
+  $self->send_to_client( $_, $output ) for
+    keys %{ $self->{clients} };
   return 1;
 }
 
@@ -671,6 +686,12 @@ Send some output to a connected client. First parameter must be a valid client i
 The second parameter may also be an arrayref of items to send to the client. If the filter you have used requires an arrayref as
 input, nest that arrayref within another arrayref.
 
+=item C<send_to_all_clients>
+
+Send some output to all connected clients. The parameter is a string of text to send.
+The parameter may also be an arrayref of items to send to the clients. If the filter you have used requires an arrayref as
+input, nest that arrayref within another arrayref.
+
 =item C<client_info>
 
 Retrieve socket information of a given client. Requires a valid client ID as a parameter. If called in a list context it returns a list 
@@ -735,8 +756,16 @@ Terminates the component. Shuts down the listener and disconnects connected clie
 
 =item C<send_to_client>
 
-Send some output to a connected client. First parameter must be a valid client ID. 
-Second parameter is a string of text to send.
+Send some output to a connected client. First parameter must be a valid client id. Second parameter is a string of text to send.
+The second parameter may also be an arrayref of items to send to the client. If the filter you have used requires an arrayref as
+input, nest that arrayref within another arrayref.
+
+
+=item C<send_to_all_clients>
+
+Send some output to all connected clients. The parameter is a string of text to send.
+The parameter may also be an arrayref of items to send to the clients. If the filter you have used requires an arrayref as
+input, nest that arrayref within another arrayref.
 
 =item C<disconnect>
 
