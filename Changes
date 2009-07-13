@@ -1,6 +1,9 @@
 Test::POE::Server::TCP
 ======================
 
+1.08  Mon Jul 13 15:33:34 BST 2009
+  - Added send_to_all_clients, a broadcast mechanism
+
 1.06	Wed Jun 10 21:47:29 BST 2009
 	- Added client_wheel method to get at the erm client wheel
 

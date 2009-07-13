@@ -5,6 +5,7 @@ name 'Test-POE-Server-TCP';
 author 'Chris Williams <chris@bingosnet.co.uk>';
 version_from 'lib/Test/POE/Server/TCP.pm';
 abstract_from 'lib/Test/POE/Server/TCP.pm';
+readme_from 'lib/Test/POE/Server/TCP.pm';
 license 'perl';
 auto_license holder => 'Chris Williams, Rocco Caputo, Ann Barcomb and Jos Boumans';
 perl_version '5.006';
