@@ -7,7 +7,7 @@ use Socket;
 use Carp qw(carp croak);
 use vars qw($VERSION);
 
-$VERSION = '1.08';
+$VERSION = '1.10';
 
 sub spawn {
   my $package = shift;
@@ -26,6 +26,7 @@ sub spawn {
 		      send_to_all_clients => '_send_to_all_clients',
 		      disconnect          => '_disconnect',
 		      terminate           => '_terminate',
+          start_listener      => '_start_listener',
 	            },
 	   $self => [ qw(_start register unregister _accept_client _accept_failed _conn_input _conn_error _conn_flushed _conn_alarm _send_to_client __send_event _disconnect _send_to_all_clients) ],
 	],
@@ -88,6 +89,19 @@ sub _start {
     $kernel->post( $sender, $self->{_prefix} . 'registered', $self );
     $kernel->detach_myself();
   }
+
+  $kernel->call( $self->{session_id}, 'start_listener' );
+  return;
+}
+
+sub start_listener {
+  my $self = shift;
+  $poe_kernel->call( $self->{session_id}, 'start_listener', @_ );
+}
+
+sub _start_listener {
+  my ($kernel,$self) = @_[KERNEL,OBJECT];
+  return if $self->{listener};
 
   $self->{listener} = POE::Wheel::SocketFactory->new(
       ( defined $self->{address} ? ( BindAddress => $self->{address} ) : () ),
@@ -223,7 +237,7 @@ sub _test_filter {
 sub _accept_failed {
   my ($kernel,$self,$operation,$errnum,$errstr,$wheel_id) = @_[KERNEL,OBJECT,ARG0..ARG3];
   warn "Wheel $wheel_id generated $operation error $errnum: $errstr\n";
-  delete $self->{listener};
+  delete $self->{listener} if $operation eq 'listen';
   $self->_send_event( $self->{_prefix} . 'listener_failed', $operation, $errnum, $errstr );
   return;
 }
@@ -732,6 +746,10 @@ Access to the L<POE::Wheel::SocketFactory> method of the underlying listening so
 
 Returns the port that the component is listening on.
 
+=item C<start_listener>
+
+If the listener fails on C<listen> you can attempt to restart it with this.
+
 =back
 
 =head1 INPUT EVENTS
@@ -775,6 +793,10 @@ Places a client connection in pending disconnect state. Requires a valid client 
 
 Immediately disconnects a client conenction. Requires a valid client ID as a parameter.
 
+=item C<start_listener>
+
+If the listener fails on C<listen> you can attempt to restart it with this.
+
 =back
 
 =head1 OUTPUT EVENTS
@@ -793,6 +815,9 @@ This event is sent to a registering session. ARG0 is the Test::POE::Server::TCP 
 Generated if the component cannot either start a listener or there is a problem
 accepting client connections. ARG0 contains the name of the operation that failed. 
 ARG1 and ARG2 hold numeric and string values for $!, respectively.
+
+If the operation was C<listen>, the component will remove the listener.
+You may attempt to start it again using C<start_listener>.
 
 =item C<testd_connected>
 
