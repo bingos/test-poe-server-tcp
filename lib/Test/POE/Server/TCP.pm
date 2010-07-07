@@ -277,8 +277,9 @@ sub _conn_input {
 sub _conn_error {
   my ($self,$errstr,$id) = @_[OBJECT,ARG2,ARG3];
   return unless $self->_conn_exists( $id );
-  delete $self->{clients}->{ $id };
-  $self->_send_event( $self->{_prefix} . 'disconnected', $id );
+  my $href = delete $self->{clients}->{ $id };
+  delete $href->{wheel};
+  $self->_send_event( $self->{_prefix} . 'disconnected', $id,  map { $href->{$_} } qw(peeraddr peerport sockaddr sockport) );
   return;
 }
 
@@ -399,11 +400,6 @@ sub __send_event {
   $self->_send_event( $event, @args );
   return;
 }
-
-#sub send_event {
-#  my $self = shift;
-#  $poe_kernel->post( $self->{session_id}, '__send_event', @_ );
-#}
 
 sub _send_event  {
   my $self = shift;
@@ -822,12 +818,14 @@ ARG4 is our socket port.
 
 =item C<testd_disconnected>
 
-Generated whenever a client disconnects. ARG0 is the client ID.
+Generated whenever a client disconnects. ARG0 was the client ID, ARG1
+was the client's IP address, ARG2 was the client's TCP port. ARG3 was our IP address and
+ARG4 was our socket port.
 
 =item C<testd_client_input>
 
-Generated whenever a client sends us some traffic. ARG0 is the client ID, ARG1 is the data sent ( tokenised by whatever POE::Filter you 
-specified. 
+Generated whenever a client sends us some traffic. ARG0 is the client ID, ARG1 is the data sent 
+( tokenised by whatever POE::Filter you specified ).
 
 =item C<testd_client_flushed>
 
