@@ -1,13 +1,12 @@
 package Test::POE::Server::TCP;
 
+# ABSTRACT: A POE Component providing TCP server services for test cases
+
 use strict;
 use warnings;
 use POE qw(Wheel::SocketFactory Wheel::ReadWrite Filter::Line);
 use Socket;
 use Carp qw(carp croak);
-use vars qw($VERSION);
-
-$VERSION = '1.10';
 
 sub spawn {
   my $package = shift;
@@ -455,11 +454,7 @@ sub _send_to_all_clients {
 
 q{Putting the test into POE};
 
-__END__
-
-=head1 NAME
-
-Test::POE::Server::TCP - A POE Component providing TCP server services for test cases
+=pod
 
 =head1 SYNOPSIS
 
@@ -840,17 +835,9 @@ Generated whenever anything we send to the client is actually flushed down the '
 
 =back
 
-=head1 AUTHOR
+=head1 CREDITS
 
-Chris C<BinGOs> Williams <chris@bingosnet.co.uk>
-
-with code borrowed from L<POE::Component::Server::TCP> by Rocco Caputo, Ann Barcomb and Jos Boumans.
-
-=head1 LICENSE
-
-Copyright E<copy> Chris Williams, Rocco Caputo, Ann Barcomb and Jos Boumans.
-
-This module may be used, modified, and distributed under the same terms as Perl itself. Please see the license that came with your Perl distribution for details.
+This module uses code borrowed from L<POE::Component::Server::TCP> by Rocco Caputo, Ann Barcomb and Jos Boumans.
 
 =head1 SEE ALSO
 
