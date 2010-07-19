@@ -421,7 +421,7 @@ sub send_to_client {
 sub _send_to_client {
   my ($kernel,$self,$id,$output) = @_[KERNEL,OBJECT,ARG0..ARG1];
   return unless $self->_conn_exists( $id );
-  return unless $output;
+  return unless defined $output;
 
   if ( ref $output eq 'ARRAY' ) {
     my $temp = [ @{ $output } ];
@@ -442,7 +442,7 @@ sub send_to_all_clients {
 
 sub _send_to_all_clients {
   my ($kernel,$self,$output) = @_[KERNEL,OBJECT,ARG0];
-  return unless $output;
+  return unless defined $output;
   $self->send_to_client( $_, $output ) for
     keys %{ $self->{clients} };
   return 1;
