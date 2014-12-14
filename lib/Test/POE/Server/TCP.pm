@@ -500,7 +500,7 @@ A very simple echo server with logging of requests by each client:
      # The client sent us a line of input
      # lets store it
 
-     push @{ $heap->{clients}->{ $id }, $input;
+     push @{ $heap->{clients}->{ $id } }, $input;
 
      # Okay, we are an echo server so lets send it back to the client
      # We know the SENDER so can always obtain the server object.
