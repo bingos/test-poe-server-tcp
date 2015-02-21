@@ -8,6 +8,20 @@ use POE qw(Wheel::SocketFactory Wheel::ReadWrite Filter::Line);
 use Socket;
 use Carp qw(carp croak);
 
+our $GOT_SOCKET6;
+
+BEGIN {
+    eval {
+        Socket->import(qw(AF_INET6 IN6ADDR_ANY NI_NUMERICHOST NI_NUMERICSERV getnameinfo));
+        $GOT_SOCKET6 = 1;
+    };
+    if (!$GOT_SOCKET6) {
+       # provide a dummy subs so code compiles
+       *AF_INET6 = sub { ~0 };
+       *IN6ADDR_ANY = sub { ~0 };
+    }
+}
+
 sub spawn {
   my $package = shift;
   my %opts = @_;
@@ -27,7 +41,8 @@ sub spawn {
 		      terminate           => '_terminate',
           start_listener      => '_start_listener',
 	            },
-	   $self => [ qw(_start register unregister _accept_client _accept_failed _conn_input _conn_error _conn_flushed _conn_alarm _send_to_client __send_event _disconnect _send_to_all_clients) ],
+	   $self => [ qw(_start register unregister _accept_client _conn_input _conn_error _conn_flushed _conn_alarm
+                _send_to_client __send_event _disconnect _send_to_all_clients _accept_failed4 _accept_failed6) ],
 	],
 	heap => $self,
 	( ref($options) eq 'HASH' ? ( options => $options ) : () ),
@@ -40,13 +55,13 @@ sub session_id {
 }
 
 sub pause_listening {
-  return unless $_[0]->{listener};
-  $_[0]->{listener}->pause_accept();
+  $_[0]->{listener}->pause_accept() if $_[0]->{listener};
+  $_[0]->{listener6}->pause_accept() if $_[0]->{listener6};
 }
 
 sub resume_listening {
-  return unless $_[0]->{listener};
-  $_[0]->{listener}->resume_accept();
+  $_[0]->{listener}->resume_accept() if $_[0]->{listener};
+  $_[0]->{listener6}->resume_accept() if $_[0]->{listener6};
 }
 
 sub getsockname {
@@ -59,10 +74,20 @@ sub port {
   return ( sockaddr_in( $self->getsockname() ) )[0];
 }
 
+sub getsockname6 {
+  return unless $_[0]->{listener6};
+  return $_[0]->{listener6}->getsockname();
+}
+
+sub port6 {
+  my $self = shift;
+  return ( sockaddr_in6( $self->getsockname6() ) )[0];
+}
+
 sub _conn_exists {
   my ($self,$wheel_id) = @_;
   return 0 unless $wheel_id and defined $self->{clients}->{ $wheel_id };
-  return 1; 
+  return 1;
 }
 
 sub shutdown {
@@ -75,7 +100,7 @@ sub _start {
   $self->{session_id} = $_[SESSION]->ID();
   if ( $self->{alias} ) {
 	$kernel->alias_set( $self->{alias} );
-  } 
+  }
   else {
 	$kernel->refcount_increment( $self->{session_id} => __PACKAGE__ );
   }
@@ -106,8 +131,21 @@ sub _start_listener {
       ( defined $self->{address} ? ( BindAddress => $self->{address} ) : () ),
       ( defined $self->{port} ? ( BindPort => $self->{port} ) : ( BindPort => 0 ) ),
       SuccessEvent   => '_accept_client',
-      FailureEvent   => '_accept_failed',
+      FailureEvent   => '_accept_failed4',
       SocketDomain   => AF_INET,             # Sets the socket() domain
+      SocketType     => SOCK_STREAM,         # Sets the socket() type
+      SocketProtocol => 'tcp',               # Sets the socket() protocol
+      Reuse          => 'on',                # Lets the port be reused
+  );
+
+  return unless $GOT_SOCKET6;
+
+  $self->{listener6} = POE::Wheel::SocketFactory->new(
+      #BindAddress => IN6ADDR_ANY,
+      ( defined $self->{port} ? ( BindPort => $self->{port} ) : ( BindPort => 0 ) ),
+      SuccessEvent   => '_accept_client',
+      FailureEvent   => '_accept_failed6',
+      SocketDomain   => AF_INET6,            # Sets the socket() domain
       SocketType     => SOCK_STREAM,         # Sets the socket() type
       SocketProtocol => 'tcp',               # Sets the socket() protocol
       Reuse          => 'on',                # Lets the port be reused
@@ -117,10 +155,12 @@ sub _start_listener {
 }
 
 sub _accept_client {
-  my ($kernel,$self,$socket,$peeraddr,$peerport) = @_[KERNEL,OBJECT,ARG0..ARG2];
-  my $sockaddr = inet_ntoa( ( unpack_sockaddr_in ( CORE::getsockname $socket ) )[1] );
-  my $sockport = ( unpack_sockaddr_in ( CORE::getsockname $socket ) )[0];
-  $peeraddr = inet_ntoa( $peeraddr );
+  my ($kernel,$self,$socket,$listener_id) = @_[KERNEL,OBJECT,ARG0,ARG3];
+
+  my (undef,$peeraddr,$peerport) = getnameinfo( CORE::getpeername( $socket ), NI_NUMERICHOST | NI_NUMERICSERV );
+  my (undef,$sockaddr,$sockport) = getnameinfo( CORE::getsockname( $socket ), NI_NUMERICHOST | NI_NUMERICSERV );
+
+  s!^::ffff:!! for ( $sockaddr, $peeraddr );
 
   my $wheel = POE::Wheel::ReadWrite->new(
 	Handle => $socket,
@@ -135,11 +175,11 @@ sub _accept_client {
   );
 
   return unless $wheel;
-  
+
   my $id = $wheel->ID();
-  $self->{clients}->{ $id } = 
-  { 
-				wheel    => $wheel, 
+  $self->{clients}->{ $id } =
+  {
+				wheel    => $wheel,
 				peeraddr => $peeraddr,
 				peerport => $peerport,
 				sockaddr => $sockaddr,
@@ -233,10 +273,18 @@ sub _test_filter {
     return 1;
 }
 
-sub _accept_failed {
+sub _accept_failed4 {
   my ($kernel,$self,$operation,$errnum,$errstr,$wheel_id) = @_[KERNEL,OBJECT,ARG0..ARG3];
   warn "Wheel $wheel_id generated $operation error $errnum: $errstr\n";
   delete $self->{listener} if $operation eq 'listen';
+  $self->_send_event( $self->{_prefix} . 'listener_failed', $operation, $errnum, $errstr );
+  return;
+}
+
+sub _accept_failed6 {
+  my ($kernel,$self,$operation,$errnum,$errstr,$wheel_id) = @_[KERNEL,OBJECT,ARG0..ARG3];
+  warn "Wheel $wheel_id generated $operation error $errnum: $errstr\n";
+  delete $self->{listener6} if $operation eq 'listen';
   $self->_send_event( $self->{_prefix} . 'listener_failed', $operation, $errnum, $errstr );
   return;
 }
@@ -316,6 +364,7 @@ sub _conn_alarm {
 sub _shutdown {
   my ($kernel,$self) = @_[KERNEL,OBJECT];
   delete $self->{listener};
+  delete $self->{listener6};
   delete $self->{clients};
   $kernel->alarm_remove_all();
   $kernel->alias_remove( $_ ) for $kernel->alias_list();
@@ -470,10 +519,10 @@ A very simple echo server with logging of requests by each client:
    	)],
      ],
    );
-   
+
    $poe_kernel->run();
    exit 0;
-   
+
    sub _start {
      # Spawn the Test::POE::Server::TCP server.
      $_[HEAP]->{testd} = Test::POE::Server::TCP->spawn(
@@ -482,7 +531,7 @@ A very simple echo server with logging of requests by each client:
      );
      return;
    }
-   
+
    sub testd_connected {
      my ($heap,$id) = @_[HEAP,ARG0];
 
@@ -493,7 +542,7 @@ A very simple echo server with logging of requests by each client:
 
      return;
    }
-   
+
    sub testd_client_input {
      my ($kernel,$heap,$sender,$id,$input) = @_[KERNEL,HEAP,SENDER,ARG0,ARG1];
 
@@ -536,15 +585,15 @@ Using the module in a testcase:
    use Test::More;
    use POE qw(Wheel::SocketFactory Wheel::ReadWrite Filter::Line);
    use Test::POE::Server::TCP;
-   
+
    plan tests => 5;
-   
+
    my @data = (
      'This is a test',
      'This is another test',
      'This is the last test',
    );
-   
+
    POE::Session->create(
      package_states => [
    	'main' => [qw(
@@ -560,10 +609,10 @@ Using the module in a testcase:
      ],
      heap => { data => \@data, },
    );
-   
+
    $poe_kernel->run();
    exit 0;
-   
+
    sub _start {
      $_[HEAP]->{testd} = Test::POE::Server::TCP->spawn(
    	address => '127.0.0.1',
@@ -571,7 +620,7 @@ Using the module in a testcase:
      );
      return;
    }
-   
+
    sub testd_registered {
      my ($heap,$object) = @_[HEAP,ARG0];
      $heap->{port} = $object->port();
@@ -583,7 +632,7 @@ Using the module in a testcase:
      );
      return;
    }
-   
+
    sub _sock_up {
      my ($heap,$socket) = @_[HEAP,ARG0];
      delete $heap->{factory};
@@ -595,14 +644,14 @@ Using the module in a testcase:
      $heap->{socket}->put( $heap->{data}->[0] );
      return;
    }
-   
+
    sub _sock_fail {
      my $heap = $_[HEAP];
      delete $heap->{factory};
      $heap->{testd}->shutdown();
      return;
    }
-   
+
    sub _sock_in {
      my ($heap,$input) = @_[HEAP,ARG0];
      my $data = shift @{ $heap->{data} };
@@ -614,24 +663,24 @@ Using the module in a testcase:
      $heap->{socket}->put( $heap->{data}->[0] );
      return;
    }
-   
+
    sub _sock_err {
      delete $_[HEAP]->{socket};
      return;
    }
-   
+
    sub testd_connected {
      my ($heap,$state,$id) = @_[HEAP,STATE,ARG0];
      pass($state);
      return;
    }
-   
+
    sub testd_disconnected {
      pass($_[STATE]);
      $poe_kernel->post( $_[SENDER], 'shutdown' );
      return;
    }
-   
+
    sub testd_client_input {
      my ($sender,$id,$input) = @_[SENDER,ARG0,ARG1];
      my $testd = $_[SENDER]->get_heap();
@@ -641,16 +690,18 @@ Using the module in a testcase:
 
 =head1 DESCRIPTION
 
-Test::POE::Server::TCP is a L<POE> component that provides a TCP server framework for inclusion in 
+Test::POE::Server::TCP is a L<POE> component that provides a TCP server framework for inclusion in
 client component test cases, instead of having to roll your own.
 
 Once registered with the component, a session will receive events related to client connects, disconnects,
-input and flushed output. Each of these events will refer to a unique client ID which may be used in 
+input and flushed output. Each of these events will refer to a unique client ID which may be used in
 communication with the component when sending data to the client or disconnecting a client connection.
+
+If AF_INET6 sockets are supported the component with create an AF_INET and an AF_INET6 socket.
 
 =head1 CONSTRUCTOR
 
-=over 
+=over
 
 =item C<spawn>
 
@@ -699,7 +750,7 @@ input, nest that arrayref within another arrayref.
 
 =item C<client_info>
 
-Retrieve socket information of a given client. Requires a valid client ID as a parameter. If called in a list context it returns a list 
+Retrieve socket information of a given client. Requires a valid client ID as a parameter. If called in a list context it returns a list
 consisting of, in order, the client address, the client TCP port, our address and our TCP port. In a scalar context it returns a HASHREF
 with the following keys:
 
@@ -710,12 +761,13 @@ with the following keys:
 
 =item C<client_wheel>
 
-Retrieve the L<POE::Wheel::ReadWrite> object of a given client. Requires a valid client ID as a parameter. This enables one to 
+Retrieve the L<POE::Wheel::ReadWrite> object of a given client. Requires a valid client ID as a parameter. This enables one to
 manipulate the given L<POE::Wheel::ReadWrite> object, say to switch L<POE::Filter>.
 
 =item C<disconnect>
 
-Places a client connection in pending disconnect state. Requires a valid client ID as a parameter. Set this, then send an applicable message to the client using send_to_client() and the client connection will be terminated.
+Places a client connection in pending disconnect state. Requires a valid client ID as a parameter.
+Set this, then send an applicable message to the client using send_to_client() and the client connection will be terminated.
 
 =item C<terminate>
 
@@ -731,11 +783,19 @@ The companion of C<pause_listening>
 
 =item C<getsockname>
 
-Access to the L<POE::Wheel::SocketFactory> method of the underlying listening socket.
+Access to the L<POE::Wheel::SocketFactory> method of the underlying listening AF_INET socket.
 
 =item C<port>
 
 Returns the port that the component is listening on.
+
+=item C<getsockname6>
+
+Access to the L<POE::Wheel::SocketFactory> method of the underlying listening AF_INET6 socket.
+
+=item C<port6>
+
+Returns the port that the component is listening on for AF_INET6.
 
 =item C<start_listener>
 
@@ -769,7 +829,6 @@ Send some output to a connected client. First parameter must be a valid client i
 The second parameter may also be an arrayref of items to send to the client. If the filter you have used requires an arrayref as
 input, nest that arrayref within another arrayref.
 
-
 =item C<send_to_all_clients>
 
 Send some output to all connected clients. The parameter is a string of text to send.
@@ -792,7 +851,7 @@ If the listener fails on C<listen> you can attempt to restart it with this.
 
 =head1 OUTPUT EVENTS
 
-The component sends the following events to registered sessions. If you have changed the C<prefix> option in C<spawn> then 
+The component sends the following events to registered sessions. If you have changed the C<prefix> option in C<spawn> then
 substitute C<testd> with the event prefix that you specified.
 
 =over
@@ -804,7 +863,7 @@ This event is sent to a registering session. ARG0 is the Test::POE::Server::TCP 
 =item C<testd_listener_failed>
 
 Generated if the component cannot either start a listener or there is a problem
-accepting client connections. ARG0 contains the name of the operation that failed. 
+accepting client connections. ARG0 contains the name of the operation that failed.
 ARG1 and ARG2 hold numeric and string values for $!, respectively.
 
 If the operation was C<listen>, the component will remove the listener.
@@ -824,7 +883,7 @@ ARG4 was our socket port.
 
 =item C<testd_client_input>
 
-Generated whenever a client sends us some traffic. ARG0 is the client ID, ARG1 is the data sent 
+Generated whenever a client sends us some traffic. ARG0 is the client ID, ARG1 is the data sent
 ( tokenised by whatever POE::Filter you specified ).
 
 =item C<testd_client_flushed>
